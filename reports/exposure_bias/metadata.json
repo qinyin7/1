@@ -1,0 +1,40 @@
+{
+  "profile": "local_8gb_large",
+  "panel": "full_val",
+  "seed": 2026,
+  "experiments": [
+    "R0.2",
+    "R1.0",
+    "R2.4",
+    "R3.3",
+    "R3.4",
+    "R3.5",
+    "R3.6"
+  ],
+  "k": 100,
+  "policies": [
+    {
+      "policy": "uniform",
+      "density": 0.05
+    },
+    {
+      "policy": "uniform",
+      "density": 0.1
+    },
+    {
+      "policy": "uniform",
+      "density": 0.2
+    },
+    {
+      "policy": "popularity_biased",
+      "density": 0.1
+    },
+    {
+      "policy": "positive_biased",
+      "density": 0.1
+    }
+  ],
+  "evaluated_users": 717,
+  "evaluated_pairs": 2376459,
+  "catalog_size": 3327
+}

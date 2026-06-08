@@ -1,0 +1,11 @@
+{
+  "stage_a": "rank_mix",
+  "stage_b": "rank_mix",
+  "experiment_a": "DR2.din.refit",
+  "experiment_b": "DR4.rank_mix",
+  "metric": "ndcg_at_10",
+  "paired_users": 717,
+  "mean_difference_b_minus_a": 0.006114131040669279,
+  "ci_95_low": 0.0013760117678553313,
+  "ci_95_high": 0.01102047256415196
+}

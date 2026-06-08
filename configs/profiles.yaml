@@ -1,0 +1,41 @@
+local_8gb_large:
+  data_seed: 2026
+  full_exposure_user_fraction: 0.5
+  full_exposure_split_seed: 2026
+  full_exposure_validation_fraction: 0.5
+  max_users: 3000
+  max_eval_users: 1800
+  recall_k: 100
+  itemcf_history_length: 50
+  itemcf_neighbors: 200
+  two_tower_epochs: 5
+  two_tower_batch_size: 4096
+  two_tower_embedding_dim: 64
+  ranking_train_rows: 3000000
+  ranking_valid_rows: null
+  lightgbm_estimators: 500
+  deep_ranking_epochs: 3
+  deep_ranking_batch_size: 8192
+  deep_ranking_embedding_dim: 16
+  din_history_length: 50
+
+full_24gb:
+  data_seed: 2026
+  full_exposure_user_fraction: 0.5
+  full_exposure_split_seed: 2026
+  full_exposure_validation_fraction: 0.5
+  max_users: null
+  max_eval_users: null
+  recall_k: 200
+  itemcf_history_length: 100
+  itemcf_neighbors: 400
+  two_tower_epochs: 10
+  two_tower_batch_size: 16384
+  two_tower_embedding_dim: 128
+  ranking_train_rows: null
+  ranking_valid_rows: null
+  lightgbm_estimators: 1200
+  deep_ranking_epochs: 5
+  deep_ranking_batch_size: 16384
+  deep_ranking_embedding_dim: 32
+  din_history_length: 100

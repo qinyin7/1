@@ -1,0 +1,98 @@
+profile: full_24gb
+baseline_name: full_24gb_feature_tower_rankmix
+selection_status: full_24gb_frozen_full_test_complete
+required_selection_panel: full_val
+required_frozen_test_panel: full_test
+frozen_full_test_result:
+  recall_at_10: 0.009225
+  ndcg_at_10: 0.878409
+  utility_at_10: 1.054035
+  cold_recall_at_10: 0.037353
+  coverage_at_10: 0.036970
+  recall_at_200: 0.139489
+  ndcg_at_200: 0.706355
+  utility_at_200: 0.700040
+  coverage_at_200: 0.520289
+  cold_recall_at_200: 0.247849
+update_policy:
+  train_through: train
+  recommendation: daily_or_window_refresh
+
+candidate_generation:
+  top_per_channel: 150
+  merge: deduplicate
+  channels:
+  - name: itemcf_main
+    experiment_id: itemcf_main
+    legacy_experiment_id: R1.0
+    role: main_recall
+  - name: content_cold_start
+    experiment_id: content_text_category
+    legacy_experiment_id: R2.4
+    role: cold_start
+  - name: two_tower_diversity
+    experiment_id: feature_tower_id_dropout
+    legacy_experiment_id: R3.4
+    role: complementary_candidates
+
+scenario_channels:
+  - name: category_exploration
+    experiment_id: category_content_exploration
+    legacy_experiment_id: R2.0
+    role: cross_distribution_exploration
+  - name: decayed_popular_fallback
+    experiment_id: decayed_popular_fallback
+    legacy_experiment_id: R0.2
+    role: fallback
+
+ranker:
+  experiment_id: rankmix_lambdarank_din
+  legacy_experiment_id: DR4.rank_mix
+  model: rank_mix
+  output_top_k: 200
+  formula: "0.6 * RRF(din_sequence_ranker, k=60) + 0.4 * RRF(lambdarank_full_features, k=60)"
+  feature_groups:
+    - recall_source_and_rank
+    - user_and_item_statistics
+    - user_item_cross_features
+    - cold_start_and_freshness
+
+tabular_fallback:
+  experiment_id: lambdarank_full_features
+  legacy_experiment_id: PR3
+  model: lightgbm_lambdarank
+  decision: keep_as_cpu_fallback_and_tabular_baseline
+
+sequence_ranker:
+  experiment_id: din_sequence_ranker
+  legacy_experiment_id: DR2.din
+  model: din
+  decision: keep_as_sequence_interest_component_for_rank_mix
+
+offline_challenger:
+  experiment_id: mmoe_multitask_ranker
+  legacy_experiment_id: DR3.mmoe_multitask
+  model: mmoe
+  training_targets:
+    - complete
+    - strong
+    - short
+  serving_score: "0.6 * complete + 0.3 * strong + 0.1 * (1 - short)"
+  decision: keep_offline_until_multitask_objective_beats_din
+
+monitoring:
+  refresh_frequency: daily
+  metrics:
+    - recall_at_10_by_day
+    - ndcg_at_10_by_day
+    - cold_recall_at_10_by_day
+    - recall_at_200_by_day
+    - ndcg_at_200_by_day
+    - cold_recall_at_200_by_day
+    - candidate_item_age_distribution
+    - channel_selected_rate
+
+fallback:
+  experiment_id: lambdarank_full_features
+  legacy_experiment_id: PR3
+  description: CPU LambdaRank fallback when DIN serving is unavailable.

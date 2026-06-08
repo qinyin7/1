@@ -1,0 +1,261 @@
+data:
+  feature_end: "2020-07-12"
+  train_end: "2020-08-10"
+  valid_end: "2020-08-31"
+  test_end: "2020-09-05"
+  primary_label: complete
+  labels:
+    complete: "watch_ratio >= 1.0"
+    strong: "watch_ratio >= 2.0"
+    short: "play_duration < min(3000, video_duration)"
+    watch_regression: "log1p(min(watch_ratio, 5.0))"
+  train_source: big_matrix
+  tuning_source: small_matrix_full_val_users
+  frozen_test_source: small_matrix_full_test_users
+  diagnostic_source: big_matrix_temporal_replay
+  exclude_seen_items: true
+
+evaluation:
+  recall_k: [20, 50, 100, 200]
+  rank_k: [10, 20, 50]
+  primary_recall_metric: recall_at_100
+  primary_ranking_metric: ndcg_at_10
+  bootstrap_samples: 1000
+  random_seeds: [2026, 2027, 2028]
+  panels:
+    - full_val
+    - full_test
+    - big_temporal_diagnostic
+    - big_logged_ranking_diagnostic
+
+recall_experiments:
+  - id: R0.0
+    model: popular
+    params: {window_days: null, time_decay: false}
+  - id: R0.1
+    model: popular
+    params: {window_days: 7, time_decay: false}
+  - id: R0.2
+    public_id: decayed_popular_fallback
+    model: popular
+    params: {window_days: null, time_decay: true, half_life_days: 7}
+  - id: R1.0
+    public_id: itemcf_main
+    model: itemcf
+    params: {feedback: complete, iuf: true, time_decay: false, history_length: 50}
+  - id: R1.2
+    model: itemcf
+    params: {feedback: complete, iuf: true, time_decay: true, history_length: 50}
+  - id: R1.3
+    model: itemcf
+    params: {feedback: multi_feedback, iuf: true, time_decay: true, history_length: 50}
+  - id: R2.0
+    public_id: category_content_exploration
+    model: content
+    params: {features: first_level_category}
+  - id: R2.3
+    model: content
+    params: {features: text_tfidf}
+  - id: R2.4
+    public_id: content_text_category
+    model: content
+    params: {features: category_and_tfidf}
+  - id: R2F1
+    model: fusion
+    params:
+      components: [R2.0, R2.4]
+      weights: [0.70, 0.30]
+  - id: R2F2
+    model: fusion
+    params:
+      components: [R2.0, R2.4]
+      weights: [0.50, 0.50]
+  - id: R2F3
+    model: fusion
+    params:
+      components: [R2.0, R2.4]
+      weights: [0.30, 0.70]
+  - id: R3.0
+    model: two_tower
+    params: {features: id_only, negative_sampling: in_batch}
+  - id: RF0
+    model: fusion
+    params:
+      components: [R0.2, R1.3, R2.0, R3.0]
+  - id: RF1
+    model: fusion
+    params:
+      components: [R1.0, R2.0, R0.2]
+      weights: [0.70, 0.20, 0.10]
+  - id: RF2
+    model: fusion
+    params:
+      components: [R1.0, R2.0, R0.2]
+      weights: [0.60, 0.30, 0.10]
+  - id: RF3
+    model: fusion
+    params:
+      components: [R1.0, R2.0, R0.2]
+      weights: [0.70, 0.25, 0.05]
+  - id: R3.3
+    model: two_tower
+    params: {features: profile_history_item_content, negative_sampling: mixed}
+  - id: R3.4
+    public_id: feature_tower_id_dropout
+    model: two_tower
+    params: {features: profile_history_item_content, id_dropout: 0.5}
+  - id: R3.5
+    model: two_tower
+    params: {features: profile_history_item_content, hard_negative_ratio: 0.5}
+  - id: R1.0R
+    model: itemcf
+    enabled: false
+    params: {feedback: complete, iuf: true, time_decay: false, history_length: 50, train_through: valid}
+  - id: R3.3R
+    model: two_tower
+    enabled: false
+    params: {features: profile_history_item_content, negative_sampling: mixed, train_through: valid}
+  - id: R2.4R
+    model: content
+    enabled: false
+    params: {features: category_and_tfidf, train_through: valid}
+  - id: R3.4R
+    model: two_tower
+    enabled: false
+    params: {features: profile_history_item_content, train_through: valid, id_dropout: 0.5}
+  - id: R3.5R
+    model: two_tower
+    enabled: false
+    params: {features: profile_history_item_content, train_through: valid, hard_negative_ratio: 0.5}
+  - id: R3.6R
+    model: two_tower
+    enabled: false
+    params: {features: profile_history_item_content, train_through: valid, id_dropout: 0.5, hard_negative_ratio: 0.5}
+  - id: R3.6
+    model: two_tower
+    enabled: false
+    params: {features: profile_history_item_content, id_dropout: 0.5, hard_negative_ratio: 0.5}
+  - id: RFR0
+    model: fusion
+    enabled: false
+    params: {components: [R1.0R, R2.4R], weights: [0.85, 0.15], train_through: valid}
+  - id: RFR1
+    model: fusion
+    enabled: false
+    params: {components: [R1.0R, R2.4R, R3.6R], weights: [0.80, 0.15, 0.05], train_through: valid}
+  - id: RFR2
+    model: fusion
+    enabled: false
+    params: {components: [R1.0R, R2.4R, R3.6R], weights: [0.75, 0.15, 0.10], train_through: valid}
+
+ranking_experiments:
+  - id: P0
+    model: logistic_regression
+    feature_groups: [F0]
+    targets: [complete]
+  - id: P1.0
+    model: lightgbm
+    feature_groups: [F0]
+    targets: [complete]
+  - id: P1.3
+    model: lightgbm
+    feature_groups: [F0, F1, F2, F3]
+    targets: [complete]
+  - id: P1.full
+    model: lightgbm
+    feature_groups: [F0, F1, F2, F3, F5]
+    targets: [complete]
+  - id: P1.no_item_stats
+    model: lightgbm
+    feature_groups: [F0, F1, F2, F3]
+    targets: [complete]
+  - id: P1.no_user_stats
+    model: lightgbm
+    feature_groups: [F0, F2, F5]
+    targets: [complete]
+  - id: P2
+    model: deepfm
+    enabled: false
+    feature_groups: [F0, F1, F2, F3, F4, F5, F6]
+    targets: [complete]
+  - id: P3
+    model: din
+    enabled: false
+    feature_groups: [F0, F1, F2, F3, F4, F5, F6]
+    targets: [complete]
+    params: {history_length: 50}
+  - id: P4
+    model: multi_task
+    enabled: false
+    feature_groups: [F0, F1, F2, F3, F4, F5, F6]
+    targets: [complete, strong, short, watch_regression]
+
+candidate_ranking_experiments:
+  fixed_candidates:
+    train_components: [R1.0, R2.4, R3.4]
+    evaluation_components: [R1.0, R2.4, R3.4]
+    top_per_channel: 150
+    max_train_candidates_per_group: 300
+    validation_panel: full_val
+    frozen_test_panel: full_test
+  experiments:
+    - id: PR3
+      public_id: lambdarank_full_features
+      model: lightgbm_lambdarank
+      targets: [complete]
+    - id: DR1.deepfm
+      model: deepfm
+      targets: [complete]
+    - id: DR2.din
+      public_id: din_sequence_ranker
+      model: din
+      targets: [complete]
+      params: {history_feedback: complete, history_length: 50}
+    - id: DR3.mmoe_complete
+      model: mmoe
+      targets: [complete, strong, short]
+      ranking_score: complete
+    - id: DR3.mmoe_complete_strong
+      model: mmoe
+      targets: [complete, strong, short]
+      ranking_score: "0.7 * complete + 0.3 * strong"
+    - id: DR3.mmoe_multitask
+      public_id: mmoe_multitask_ranker
+      model: mmoe
+      targets: [complete, strong, short]
+      ranking_score: "0.6 * complete + 0.3 * strong + 0.1 * (1 - short)"
+    - id: DL1.din_bce
+      model: din
+      targets: [complete]
+      ranking_loss: pointwise_bce
+    - id: DL2.din_bpr
+      model: din
+      targets: [complete]
+      ranking_loss: pairwise_bpr
+    - id: DL7.din_listnet
+      model: din
+      targets: [complete]
+      ranking_loss: listnet
+    - id: DL8.din_bce_rolling
+      model: din
+      targets: [complete]
+      ranking_loss: pointwise_bce
+      params: {history_refresh: strict_point_in_time_daily}
+    - id: DS1.din_multibehavior
+      model: din
+      targets: [complete]
+      params: {history_features: [complete, strong, short, watch_ratio]}
+    - id: DS2.din_author_content_time
+      model: din
+      targets: [complete]
+      params:
+        history_features: [complete, strong, short, watch_ratio, author, content_tfidf_svd, time_gap]
+        candidate_oov_content: false
+    - id: DS3.1.din_oov_content
+      model: din
+      targets: [complete]
+      params: {candidate_oov_content: true, item_id_dropout: 0.0}
+    - id: DS3.2.din_oov_content_dropout
+      model: din
+      targets: [complete]
+      params: {candidate_oov_content: true, item_id_dropout: 0.5}

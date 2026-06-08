@@ -1,0 +1,12 @@
+data/raw/
+reports/figures/
+reports/tables/
+reports/summary.json
+__pycache__/
+*.pyc
+*.zip
+data/processed/
+artifacts/
+.pytest_cache/
+.ssh/
+.github-upload-key/

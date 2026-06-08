@@ -1,0 +1,6 @@
+policy,density,models,spearman_recall,spearman_ndcg,full_best_recall,sparse_best_recall,full_best_ndcg,sparse_best_ndcg
+popularity_biased,0.1,7,0.1785714285714286,-0.42857142857142866,R3.3,R0.2,R3.3,R0.2
+positive_biased,0.1,7,0.9642857142857145,0.8928571428571429,R3.3,R3.5,R3.3,R3.5
+uniform,0.05,7,0.8928571428571429,0.9642857142857145,R3.3,R3.3,R3.3,R3.3
+uniform,0.1,7,0.9642857142857145,0.8928571428571429,R3.3,R3.3,R3.3,R3.6
+uniform,0.2,7,1.0,0.9642857142857145,R3.3,R3.3,R3.3,R3.3
