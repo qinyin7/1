@@ -132,8 +132,8 @@ recall_experiments:
     enabled: false
     params: {features: profile_history_item_content, train_through: valid, id_dropout: 0.5, hard_negative_ratio: 0.5}
   - id: R3.6
+    public_id: feature_tower_dropout_hard_negative
     model: two_tower
-    enabled: false
     params: {features: profile_history_item_content, id_dropout: 0.5, hard_negative_ratio: 0.5}
   - id: RFR0
     model: fusion
@@ -259,3 +259,13 @@ candidate_ranking_experiments:
       model: din
       targets: [complete]
       params: {candidate_oov_content: true, item_id_dropout: 0.5}
+
+reranking_experiments:
+  - id: rankmix_lambdarank_din_mmr
+    model: mmr
+    base_ranker: rankmix_lambdarank_din
+    params:
+      lambda_relevance: 0.9
+      similarity_features: [first_category, author_id_hash]
+      category_weight: 0.6
+      author_weight: 0.4

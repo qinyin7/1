@@ -5,6 +5,7 @@ from src.recall_models import (
     FeatureTwoTowerRecall,
     ItemCFRecall,
     TextContentRecall,
+    _sample_hard_negative_indices,
     _batched_topk_recommendations,
     quota_fuse_rankings,
 )
@@ -138,3 +139,28 @@ def test_feature_two_tower_builds_cold_item_content_features():
     assert features.shape[1] > 3
     assert model.id_dropout == 0.5
     assert model.hard_negative_ratio == 0.5
+
+
+def test_sample_hard_negative_indices_avoids_sampling_the_positive_item():
+    positive_index = pd.Series([0, 1, 2, 3]).to_numpy()
+    categories = pd.Series([10, 10, 20, 30]).to_numpy()
+    known_indices = pd.Series([0, 1, 2, 3]).to_numpy()
+    known_by_category = {
+        10: pd.Series([0, 1]).to_numpy(),
+        20: pd.Series([2]).to_numpy(),
+        30: pd.Series([3]).to_numpy(),
+    }
+
+    sampled = _sample_hard_negative_indices(
+        positive_index=positive_index,
+        categories=categories,
+        known_indices=known_indices,
+        known_by_category=known_by_category,
+        seed=2026,
+    )
+
+    assert sampled.shape == positive_index.shape
+    assert sampled[0] == 1
+    assert sampled[1] == 0
+    assert sampled[2] in known_indices and sampled[2] != 2
+    assert sampled[3] in known_indices and sampled[3] != 3

@@ -68,6 +68,36 @@ def _positive_history(train: pd.DataFrame, history_length: int) -> dict[int, lis
     return positive.groupby("user_id")["video_id"].apply(lambda values: values.tail(history_length).tolist()).to_dict()
 
 
+def _sample_hard_negative_indices(
+    positive_index: np.ndarray,
+    categories: np.ndarray,
+    known_indices: np.ndarray,
+    known_by_category: dict[int, np.ndarray],
+    seed: int,
+) -> np.ndarray:
+    """Sample one hard negative per positive without per-row Python loops."""
+    sampled = np.empty_like(positive_index)
+    rng = np.random.default_rng(seed)
+    positive_categories = categories[positive_index]
+
+    for category in np.unique(positive_categories):
+        row_mask = positive_categories == category
+        row_indices = np.flatnonzero(row_mask)
+        category_positives = positive_index[row_indices]
+        candidates = known_by_category.get(int(category), known_indices)
+        if len(candidates) <= 1:
+            candidates = known_indices
+        if len(candidates) <= 1:
+            sampled[row_indices] = candidates[0]
+            continue
+
+        positive_positions = np.searchsorted(candidates, category_positives)
+        random_offsets = rng.integers(len(candidates) - 1, size=len(row_indices))
+        random_offsets += random_offsets >= positive_positions
+        sampled[row_indices] = candidates[random_offsets]
+    return sampled
+
+
 def _batched_topk_recommendations(
     users: list[int],
     known_users: list[int],
@@ -648,13 +678,13 @@ class FeatureTwoTowerRecall:
 
         user_index = positive["user_id"].map(self.user_to_index).to_numpy()
         positive_index = positive["video_id"].map(self.item_to_index).to_numpy()
-        rng = np.random.default_rng(self.seed)
-        hard_negative_index = np.empty_like(positive_index)
-        for row, item_index in enumerate(positive_index):
-            candidates = known_by_category.get(categories[item_index], known_indices)
-            hard_negative_index[row] = rng.choice(candidates if len(candidates) > 1 else known_indices)
-            if hard_negative_index[row] == item_index and len(candidates) > 1:
-                hard_negative_index[row] = rng.choice(candidates[candidates != item_index])
+        hard_negative_index = _sample_hard_negative_indices(
+            positive_index=positive_index,
+            categories=categories,
+            known_indices=known_indices,
+            known_by_category=known_by_category,
+            seed=self.seed,
+        )
         dataset = TensorDataset(
             torch.tensor(user_index),
             torch.tensor(positive_index),

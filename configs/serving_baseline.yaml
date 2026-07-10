@@ -1,19 +1,45 @@
 profile: full_24gb
-baseline_name: full_24gb_feature_tower_rankmix
-selection_status: full_24gb_frozen_full_test_complete
+baseline_name: full_24gb_feature_tower_rankmix_mmr
+selection_status: full_24gb_rankmix_mmr_frozen_full_test_complete
 required_selection_panel: full_val
 required_frozen_test_panel: full_test
+selected_full_val_result:
+  experiment_id: rankmix_lambdarank_din_mmr
+  recall_at_10: 0.008906
+  ndcg_at_10: 0.886378
+  utility_at_10: 1.082357
+  cold_recall_at_10: 0.026562
+  coverage_at_10: 0.033363
+  recall_at_200: 0.137488
+  ndcg_at_200: 0.721873
+  utility_at_200: 0.719822
+  coverage_at_200: 0.518485
+  cold_recall_at_200: 0.220177
+  selection_note: "MMR improves Coverage@200 with small relevance trade-off; selected as final reranking layer."
+reference_rankmix_frozen_full_test_result:
+  recall_at_10: 0.009220
+  ndcg_at_10: 0.878226
+  utility_at_10: 1.052522
+  cold_recall_at_10: 0.037441
+  coverage_at_10: 0.037872
+  recall_at_200: 0.139507
+  ndcg_at_200: 0.706465
+  utility_at_200: 0.700151
+  coverage_at_200: 0.519988
+  cold_recall_at_200: 0.247697
 frozen_full_test_result:
-  recall_at_10: 0.009225
-  ndcg_at_10: 0.878409
-  utility_at_10: 1.054035
-  cold_recall_at_10: 0.037353
-  coverage_at_10: 0.036970
-  recall_at_200: 0.139489
-  ndcg_at_200: 0.706355
-  utility_at_200: 0.700040
-  coverage_at_200: 0.520289
-  cold_recall_at_200: 0.247849
+  experiment_id: rankmix_lambdarank_din_mmr
+  recall_at_10: 0.009218
+  ndcg_at_10: 0.876574
+  utility_at_10: 1.053530
+  cold_recall_at_10: 0.035225
+  coverage_at_10: 0.036069
+  recall_at_200: 0.139656
+  ndcg_at_200: 0.706562
+  utility_at_200: 0.700544
+  coverage_at_200: 0.524497
+  cold_recall_at_200: 0.237664
+  selection_note: "Frozen full_test confirms MMR keeps relevance metrics statistically comparable while improving Coverage@200."
 update_policy:
   train_through: train
   recommendation: daily_or_window_refresh
@@ -46,11 +72,15 @@ scenario_channels:
     role: fallback
 
 ranker:
-  experiment_id: rankmix_lambdarank_din
+  experiment_id: rankmix_lambdarank_din_mmr
   legacy_experiment_id: DR4.rank_mix
-  model: rank_mix
+  model: rank_mix_with_mmr_rerank
   output_top_k: 200
-  formula: "0.6 * RRF(din_sequence_ranker, k=60) + 0.4 * RRF(lambdarank_full_features, k=60)"
+  formula: "MMR(0.6 * RRF(din_sequence_ranker, k=60) + 0.4 * RRF(lambdarank_full_features, k=60))"
+  reranker:
+    strategy: mmr
+    lambda_relevance: 0.9
+    similarity: "0.6 * same_category + 0.4 * same_author"
   feature_groups:
     - recall_source_and_rank
     - user_and_item_statistics

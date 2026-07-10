@@ -13,27 +13,46 @@ RECALL_FEATURES = [
     "channel_count",
 ]
 CROSS_FEATURES = ["category_affinity", "author_affinity"]
+HIGH_ORDER_CROSS_FEATURES = [
+    "category_item_complete_cross",
+    "author_item_complete_cross",
+    "channel_item_complete_cross",
+    "cold_content_cross",
+    "tower_age_cross",
+]
 TEMPORAL_FEATURES = ["item_age_days"]
 COLD_FEATURES = ["is_cold_item"]
-FEATURE_COLUMNS = [
-    *RECALL_FEATURES,
-    "first_category",
-    "video_duration",
-    "author_id_hash",
-    *COLD_FEATURES,
-    *TEMPORAL_FEATURES,
+ITEM_IDENTITY_FEATURES = ["first_category", "video_duration", "author_id_hash"]
+USER_FEATURES = [
     "user_interactions",
     "user_complete_rate",
     "user_strong_rate",
     "user_short_rate",
     "user_mean_watch_ratio",
+]
+ITEM_STAT_FEATURES = [
     "item_interactions",
     "item_complete_rate",
     "item_strong_rate",
     "item_short_rate",
     "item_mean_watch_ratio",
-    *CROSS_FEATURES,
 ]
+FEATURE_COLUMNS = [
+    *RECALL_FEATURES,
+    *ITEM_IDENTITY_FEATURES,
+    *COLD_FEATURES,
+    *TEMPORAL_FEATURES,
+    *USER_FEATURES,
+    *ITEM_STAT_FEATURES,
+    *CROSS_FEATURES,
+    *HIGH_ORDER_CROSS_FEATURES,
+]
+FEATURE_GROUPS = {
+    "recall_side": RECALL_FEATURES,
+    "user_side": USER_FEATURES,
+    "item_side": [*ITEM_IDENTITY_FEATURES, *ITEM_STAT_FEATURES, *COLD_FEATURES, *TEMPORAL_FEATURES],
+    "cross_side": [*CROSS_FEATURES, *HIGH_ORDER_CROSS_FEATURES],
+}
 PUBLIC_EXPERIMENT_FEATURES = {
     "lambdarank_basic_user_features": [
         "first_category",
@@ -51,7 +70,9 @@ PUBLIC_EXPERIMENT_FEATURES = {
         column for column in FEATURE_COLUMNS if column not in RECALL_FEATURES
     ],
     "lambdarank_without_cross_features": [
-        column for column in FEATURE_COLUMNS if column not in CROSS_FEATURES
+        column
+        for column in FEATURE_COLUMNS
+        if column not in {*CROSS_FEATURES, *HIGH_ORDER_CROSS_FEATURES}
     ],
     "lambdarank_without_temporal_features": [
         column for column in FEATURE_COLUMNS if column not in TEMPORAL_FEATURES

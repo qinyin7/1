@@ -31,6 +31,52 @@ def load_profile(profile_name: str) -> dict[str, Any]:
     return profiles[profile_name]
 
 
+def resolve_candidate_limits(
+    profile: dict[str, Any],
+    top_per_channel: int | None,
+    max_candidates_per_group: int | None,
+) -> tuple[int, int]:
+    """Resolve candidate-pool sizes with CLI values taking precedence."""
+    resolved_top = (
+        top_per_channel
+        if top_per_channel is not None
+        else int(profile.get("top_per_channel", 150))
+    )
+    resolved_max = (
+        max_candidates_per_group
+        if max_candidates_per_group is not None
+        else int(profile.get("max_candidates_per_group", 300))
+    )
+    return resolved_top, resolved_max
+
+
+def resolve_candidate_channel_limits(
+    profile: dict[str, Any],
+    top_per_channel: int,
+    channels: list[str],
+) -> dict[str, int]:
+    """Resolve per-channel candidate limits from optional profile weights."""
+    weights = profile.get("candidate_channel_weights") or {}
+    return {
+        channel: max(1, int(round(top_per_channel * float(weights.get(channel, 1.0)))))
+        for channel in channels
+    }
+
+
+def candidate_channels(profile: dict[str, Any], default_channels: list[str]) -> list[str]:
+    """Return profile-specific candidate channels while preserving old defaults."""
+    return list(profile.get("candidate_channels") or default_channels)
+
+
+def ranking_eval_ks(profile: dict[str, Any]) -> list[int]:
+    """Return ranking cutoffs while preserving @200 comparability for large runs."""
+    primary_k = int(profile["recall_k"])
+    eval_ks = {10, primary_k}
+    if primary_k >= 200:
+        eval_ks.add(200)
+    return sorted(eval_ks)
+
+
 def profile_dir(profile_name: str) -> Path:
     path = PROCESSED_DIR / profile_name
     path.mkdir(parents=True, exist_ok=True)
