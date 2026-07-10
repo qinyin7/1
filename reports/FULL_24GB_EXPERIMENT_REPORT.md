@@ -43,8 +43,9 @@
 | `full_val` | `din_sequence_ranker_refit` | `DR2.din.refit` | DIN | 0.008822 | 0.880864 | **0.038106** | 0.026150 | 1.063110 |
 | `full_val` | `rankmix_lambdarank_din` | `DR4.rank_mix` | RankMix：DIN 0.6 + LambdaRank 0.4 | **0.008896** | **0.886979** | 0.036667 | 0.034265 | **1.076081** |
 | `full_test` | `lambdarank_full_features_refit` | `PR3.refit` | LambdaRank | 0.008970 | 0.856819 | 0.028836 | **0.080553** | 1.011599 |
-| `full_test` | `din_sequence_ranker_refit` | `DR2.din.refit` | DIN | 0.009116 | 0.868332 | **0.039023** | 0.029757 | 1.039625 |
-| `full_test` | `rankmix_lambdarank_din` | `DR4.rank_mix` | RankMix：DIN 0.6 + LambdaRank 0.4 | **0.009225** | **0.878409** | 0.037353 | 0.036970 | **1.054035** |
+| `full_test` | `din_sequence_ranker_refit` | `DR2.din.refit` | DIN | 0.009104 | 0.868664 | **0.039162** | 0.029757 | 1.038761 |
+| `full_test` | `rankmix_lambdarank_din` | `DR4.rank_mix` | RankMix：DIN 0.6 + LambdaRank 0.4 | **0.009220** | **0.878226** | 0.037441 | 0.037872 | 1.052522 |
+| `full_test` | `rankmix_lambdarank_din_mmr` | `DR5.mmr` | RankMix + MMR 重排 | 0.009218 | 0.876574 | 0.035225 | 0.036069 | **1.053530** |
 
 ### 4.2 候选层 Top200 指标
 
@@ -54,10 +55,13 @@
 | `full_val` | `din_sequence_ranker_refit` | `DR2.din.refit` | 0.135536 | 0.714261 | **0.248442** | 0.408777 | 0.712266 | **0.557936** |
 | `full_val` | `rankmix_lambdarank_din` | `DR4.rank_mix` | **0.137131** | **0.721257** | 0.241866 | 0.483919 | **0.719104** | 0.526562 |
 | `full_test` | `lambdarank_full_features_refit` | `PR3.refit` | 0.138076 | 0.697271 | 0.215410 | **0.622783** | 0.690321 | 0.450713 |
-| `full_test` | `din_sequence_ranker_refit` | `DR2.din.refit` | 0.137707 | 0.698952 | **0.255448** | 0.429817 | 0.693588 | **0.553602** |
-| `full_test` | `rankmix_lambdarank_din` | `DR4.rank_mix` | **0.139489** | **0.706355** | 0.247849 | 0.520289 | **0.700040** | 0.521009 |
+| `full_test` | `din_sequence_ranker_refit` | `DR2.din.refit` | 0.137712 | 0.699075 | **0.255326** | 0.429817 | 0.693534 | **0.553602** |
+| `full_test` | `rankmix_lambdarank_din` | `DR4.rank_mix` | 0.139507 | 0.706465 | 0.247697 | 0.519988 | 0.700151 | 0.521009 |
+| `full_test` | `rankmix_lambdarank_din_mmr` | `DR5.mmr` | **0.139656** | **0.706562** | 0.237664 | 0.524497 | **0.700544** | 0.521009 |
 
-精排结论：最终选择 `rankmix_lambdarank_din` 作为主策略。它不直接混合 LambdaRank 和 DIN 的原始分数，而是使用 RRF 风格的排名融合，避免不同模型分数尺度不可比。
+精排结论：该报告阶段选择 `rankmix_lambdarank_din` 作为主排序策略。它不直接混合 LambdaRank 和 DIN 的原始分数，而是使用 RRF 风格的排名融合，避免不同模型分数尺度不可比。
+
+后续在 `full_val` 和冻结 `full_test` 上补充了 MMR 重排实验，当前服务策略升级为 `rankmix_lambdarank_din_mmr`。MMR 在 `full_test` 上保持 Recall/NDCG 统计可比，同时提升 Coverage@200，属于最终展示前的多样性重排层；详细结果见 `reports/MMR_RERANKING_EXPERIMENT_REPORT.md`。
 
 ## 5. RankMix 相对 DIN 的显著性检验
 
@@ -85,7 +89,8 @@
   feature_tower_id_dropout
 
 精排：
-  主策略：rankmix_lambdarank_din
+  主排序：rankmix_lambdarank_din
+  最终重排：rankmix_lambdarank_din_mmr
     = 0.6 * RRF(din_sequence_ranker) + 0.4 * RRF(lambdarank_full_features)
   序列模型：din_sequence_ranker
   降级模型：lambdarank_full_features

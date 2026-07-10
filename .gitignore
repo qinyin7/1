@@ -10,3 +10,9 @@ artifacts/
 .pytest_cache/
 .ssh/
 .github-upload-key/
+logs/
+*.log
+reports/mmr_significance/
+reports/FULL_48GB_EXPERIMENT_REPORT.md
+tools/
+docs/面经*.md

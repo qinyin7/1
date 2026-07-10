@@ -21,7 +21,16 @@ from src.candidate_features import (
     LABEL_COLUMNS,
     PUBLIC_EXPERIMENT_FEATURES,
 )
-from src.common import RESULT_SCHEMA_VERSION, artifact_dir, load_profile, write_json
+from src.common import (
+    RESULT_SCHEMA_VERSION,
+    artifact_dir,
+    candidate_channels,
+    load_profile,
+    ranking_eval_ks,
+    resolve_candidate_channel_limits,
+    resolve_candidate_limits,
+    write_json,
+)
 from src.data_pipeline import _aggregate_statistics
 from src.evaluation import (
     build_daily_ground_truth,
@@ -79,6 +88,7 @@ def build_candidate_frame(
     sample_training_negatives: bool,
     history_interactions: pd.DataFrame | None = None,
     evaluation_catalog_size: int | None = None,
+    channel_top_limits: dict[str, int] | None = None,
 ) -> tuple[pd.DataFrame, dict, set[int], int]:
     history_source = history_interactions if history_interactions is not None else interactions
     history = history_source[history_source["split"].isin(history_splits)]
@@ -117,11 +127,12 @@ def build_candidate_frame(
     for (user, date), positive_items in ground_truth.items():
         candidates: dict[int, dict[str, float]] = {}
         for channel, channel_result in zip(CHANNELS, recommendations):
+            channel_top = (channel_top_limits or {}).get(channel, top_per_channel)
             eligible = [
                 item
                 for item in channel_result.get(user, [])
                 if first_seen.get(item, 99999999) <= date
-            ][:top_per_channel]
+            ][:channel_top]
             for rank, item in enumerate(eligible, start=1):
                 values = candidates.setdefault(item, {})
                 values[f"{channel}_present"] = 1.0
@@ -177,6 +188,22 @@ def build_candidate_frame(
                 row[f"{channel}_rank_score"] = candidates[item].get(
                     f"{channel}_rank_score", 0.0
                 )
+            item_complete_rate = float(row.get("item_complete_rate", 0.0) or 0.0)
+            row["category_item_complete_cross"] = (
+                float(row["category_affinity"]) * item_complete_rate
+            )
+            row["author_item_complete_cross"] = (
+                float(row["author_affinity"]) * item_complete_rate
+            )
+            row["channel_item_complete_cross"] = (
+                float(row["channel_count"]) * item_complete_rate
+            )
+            row["cold_content_cross"] = (
+                float(row["is_cold_item"]) * float(row["content_present"])
+            )
+            row["tower_age_cross"] = (
+                float(row["tower_present"]) * float(row["item_age_days"])
+            )
             rows.append(row)
     frame = pd.DataFrame(rows)
     for column in FEATURE_COLUMNS:
@@ -208,6 +235,8 @@ def load_or_build_candidate_frames(
     if evaluation_panel not in FULL_EXPOSURE_PANELS:
         raise ValueError("Candidate model selection must use full_val or frozen full_test.")
     profile = load_profile(profile_name)
+    experiment_ids = candidate_channels(profile, DEFAULT_CANDIDATE_CHANNELS)
+    channel_top_limits = resolve_candidate_channel_limits(profile, top_per_channel, CHANNELS)
     split_seed = profile.get("full_exposure_split_seed", 2026)
     validation_fraction = profile.get("full_exposure_validation_fraction", 0.5)
     cache_dir = artifact_dir(profile_name, "candidate_ranking") / "cache"
@@ -222,12 +251,13 @@ def load_or_build_candidate_frames(
             "seed": seed,
             "top_per_channel": top_per_channel,
             "max_candidates_per_group": max_candidates_per_group,
-            "train_channels": DEFAULT_CANDIDATE_CHANNELS,
+            "candidate_channel_top_limits": channel_top_limits,
+            "train_channels": experiment_ids,
             "evaluation_panel": evaluation_panel,
-            "evaluation_channels": DEFAULT_CANDIDATE_CHANNELS,
+            "evaluation_channels": experiment_ids,
             "full_exposure_split_seed": split_seed,
             "full_exposure_validation_fraction": validation_fraction,
-            "schema_version": 6,
+            "schema_version": 7,
         }
     if not rebuild_cache and cache_matches and train_path.exists() and test_path.exists():
         train_frame = pd.read_parquet(train_path)
@@ -238,13 +268,14 @@ def load_or_build_candidate_frames(
             items,
             "valid",
             ["train"],
-            DEFAULT_CANDIDATE_CHANNELS,
+            experiment_ids,
             profile_name,
             max_eval_users,
             top_per_channel,
             max_candidates_per_group,
             seed,
             True,
+            channel_top_limits=channel_top_limits,
         )
         full_exposure = read_full_exposure_interactions(
             set(interactions["user_id"].unique()),
@@ -257,7 +288,7 @@ def load_or_build_candidate_frames(
             items,
             evaluation_panel,
             ["train"],
-            DEFAULT_CANDIDATE_CHANNELS,
+            experiment_ids,
             profile_name,
             max_eval_users,
             top_per_channel,
@@ -266,6 +297,7 @@ def load_or_build_candidate_frames(
             False,
             history_interactions=interactions,
             evaluation_catalog_size=len(full_exposure.attrs["full_catalog"]),
+            channel_top_limits=channel_top_limits,
         )
         cache_dir.mkdir(parents=True, exist_ok=True)
         train_frame.to_parquet(train_path, index=False)
@@ -277,12 +309,13 @@ def load_or_build_candidate_frames(
                 "seed": seed,
                 "top_per_channel": top_per_channel,
                 "max_candidates_per_group": max_candidates_per_group,
-                "train_channels": DEFAULT_CANDIDATE_CHANNELS,
+                "candidate_channel_top_limits": channel_top_limits,
+                "train_channels": experiment_ids,
                 "evaluation_panel": evaluation_panel,
-                "evaluation_channels": DEFAULT_CANDIDATE_CHANNELS,
+                "evaluation_channels": experiment_ids,
                 "full_exposure_split_seed": split_seed,
                 "full_exposure_validation_fraction": validation_fraction,
-                "schema_version": 6,
+                "schema_version": 7,
             },
         )
     if not rebuild_cache and cache_matches and train_path.exists() and test_path.exists():
@@ -404,9 +437,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", default="local_8gb_large")
     parser.add_argument("--seed", type=int, default=2026)
-    parser.add_argument("--top-per-channel", type=int, default=150)
-    parser.add_argument("--max-candidates-per-group", type=int, default=300)
-    parser.add_argument("--estimators", type=int, default=500)
+    parser.add_argument("--top-per-channel", type=int)
+    parser.add_argument("--max-candidates-per-group", type=int)
+    parser.add_argument("--estimators", type=int)
     parser.add_argument("--panel", choices=list(FULL_EXPOSURE_PANELS), default="full_val")
     parser.add_argument(
         "--experiments",
@@ -417,6 +450,12 @@ def main() -> None:
     parser.add_argument("--rebuild-cache", action="store_true")
     args = parser.parse_args()
     profile = load_profile(args.profile)
+    top_per_channel, max_candidates_per_group = resolve_candidate_limits(
+        profile,
+        args.top_per_channel,
+        args.max_candidates_per_group,
+    )
+    estimators = args.estimators or profile["lightgbm_estimators"]
     data = load_processed(args.profile)
     interactions, items = data["interactions"], data["items"]
 
@@ -426,8 +465,8 @@ def main() -> None:
         items,
         args.profile,
         profile["max_eval_users"],
-        args.top_per_channel,
-        args.max_candidates_per_group,
+        top_per_channel,
+        max_candidates_per_group,
         args.seed,
         args.rebuild_cache,
         args.panel,
@@ -436,7 +475,7 @@ def main() -> None:
     output = artifact_dir(args.profile, "candidate_ranking")
     daily_rows = []
     importance_rows = []
-    eval_ks = [10, profile["recall_k"]]
+    eval_ks = ranking_eval_ks(profile)
     for experiment_id in args.experiments:
         columns = EXPERIMENT_FEATURES[experiment_id]
         if experiment_id in {"PR.no_tower", "lambdarank_without_tower_candidates"}:
@@ -451,7 +490,7 @@ def main() -> None:
             test_experiment = test_frame
         model = LGBMRanker(
             objective="lambdarank",
-            n_estimators=args.estimators,
+            n_estimators=estimators,
             learning_rate=0.05,
             num_leaves=63,
             random_state=args.seed,
@@ -478,6 +517,9 @@ def main() -> None:
                 "train_positive_rate": float(train_experiment["label_complete"].mean()),
                 "train_seconds": train_seconds,
                 "prediction_seconds": prediction_seconds,
+                "top_per_channel": top_per_channel,
+                "max_candidates_per_group": max_candidates_per_group,
+                "estimators": estimators,
             }
         )
         results[experiment_id] = metrics

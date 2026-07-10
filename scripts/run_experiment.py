@@ -446,7 +446,6 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--profile",
-        choices=["local_8gb_large", "full_24gb"],
         default="local_8gb_large",
     )
     parser.add_argument("--stage", choices=["prepare", "recall", "ranking"], required=True)

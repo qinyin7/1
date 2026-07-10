@@ -5,11 +5,13 @@
 > Big Temporal 结果仅作为有曝光偏差的诊断。旧章节中的 `small_test`、以 Big
 > Validation 选择冠军、以及旧候选精排结果均已废弃。完整协议与最新命令见
 > `docs/FULL_EXPOSURE_EVALUATION.md`。当前 `local_8gb_large/full_val` 结果见
-> `reports/FULL_EXPOSURE_LOCAL_EXPERIMENT_REPORT.md`。冻结 `full_test` 最终 baseline 为
-> `rankmix_lambdarank_din`，结果为 `Recall@10=0.009225`、`NDCG@10=0.878409`、
-> `Recall@200=0.139489`、`NDCG@200=0.706355`。曝光偏差诊断见
+> `reports/FULL_EXPOSURE_LOCAL_EXPERIMENT_REPORT.md`。当前最终服务策略为
+> `rankmix_lambdarank_din_mmr`，48GB boosted 冻结 `full_test` 结果为
+> `Recall@10=0.009334`、`NDCG@10=0.886832`、`Recall@200=0.153195`、
+> `NDCG@200=0.757705`、`Coverage@200=0.360685`。曝光偏差诊断见
 > `reports/exposure_bias/EXPOSURE_BIAS_EXPERIMENT_REPORT.md`。AutoDL RTX 3090 24GB
-> 全量结果见 `reports/FULL_24GB_EXPERIMENT_REPORT.md`。
+> 全量结果见 `reports/FULL_24GB_EXPERIMENT_REPORT.md`，48GB boosted 结果见
+> `reports/FULL_48GB_BOOSTED_EXPERIMENT_REPORT.md`。
 
 ## 1. 目标与当前实现范围
 
@@ -22,6 +24,7 @@
 - 召回：时间衰减热门、ItemCF、类目内容召回、GPU 双塔、Round-Robin 多路融合；
 - 召回指标：Recall、HitRate、NDCG、Coverage、平均流行度、Cold Recall；
 - 精排：Logistic Regression、LightGBM LambdaRank、DeepFM、DIN、MMoE、RankMix；
+- 重排：基于 RankMix 相关性分数的 MMR 多样性重排；
 - 精排特征消融：基础、用户行为、去除 Item 统计、去除 User 统计、完整特征；
 - 精排指标：AUC、LogLoss、GAUC、用户-天 NDCG@10；
 - 严格用户-天召回评估、Big Test 与 Small Test 冻结后审计；
@@ -556,13 +559,73 @@ AutoDL RTX 3090 24GB 全量结果：
 | full_val | 融合精排 | DR4.rank_mix | **0.008896** | **0.886979** | **0.137131** | **0.721257** | 0.241866 | 0.483919 | 选型胜者 |
 | full_test | 精排 | PR3 LambdaRank | 0.008970 | 0.856819 | 0.138076 | 0.697271 | 0.215410 | **0.622783** | 冻结测试 fallback |
 | full_test | 精排 | DR2.din | 0.009116 | 0.868332 | 0.137707 | 0.698952 | **0.255448** | 0.429817 | 冻结测试序列模型 |
-| full_test | 融合精排 | DR4.rank_mix | **0.009225** | **0.878409** | **0.139489** | **0.706355** | 0.247849 | 0.520289 | 冻结测试最终主策略 |
+| full_test | 融合精排 | DR4.rank_mix | 0.009220 | 0.878226 | 0.139507 | 0.706465 | 0.247697 | 0.519988 | 原始 RankMix 冻结测试参考 |
+| full_test | 重排 | RankMix + MMR | **0.009218** | 0.876574 | **0.139656** | **0.706562** | 0.237664 | **0.524497** | 最终服务策略 |
 
-最终采用：`R1.0 + R2.4 + R3.4` 三路候选，`DR4.rank_mix` 主精排策略，
-`DR2.din` 作为序列兴趣组件，`PR3` 作为 CPU/tabular fallback。冻结
-`full_test` 已用于验收，后续不要继续在该面板上调参。
+最终采用：`R1.0 + R2.4 + R3.4` 三路候选，`DR4.rank_mix` 作为主相关性排序，
+并在最终展示前使用 MMR 做多样性重排。`DR2.din` 作为序列兴趣组件，
+`PR3` 作为 CPU/tabular fallback。冻结 `full_test` 已用于验收，后续不要继续在该面板上调参。
 
-## 22. DIN 排序目标与滚动序列实验
+## 22. MMR 第三层重排实验
+
+MMR 位于最终 TopK 生成前，结构为：
+
+```text
+召回层：ItemCF + 内容召回 + 双塔召回
+精排层：DIN + LambdaRank，通过 RankMix 融合相关性排序
+重排层：MMR 在相关性和多样性之间做 trade-off
+```
+
+当前实现使用 `rankmix_lambdarank_din` 作为相关性分数，并用类目和作者构造相似度：
+
+```text
+MMR = lambda * relevance - (1 - lambda) * max_similarity_to_selected
+similarity = 0.6 * same_category + 0.4 * same_author
+```
+
+默认 `lambda=0.9`，即主要保留 RankMix 的相关性，只轻微惩罚同类目、同作者的重复内容。运行命令：
+
+```powershell
+python scripts\run_rank_mix.py --profile local_8gb_large --panel full_val --mmr-lambda 0.9 --cpu-threads 12
+```
+
+在 24GB GPU 全量机器上：
+
+```bash
+python scripts/run_rank_mix.py --profile full_24gb --panel full_val --mmr-lambda 0.9 --cpu-threads 14
+```
+
+如果需要做 lambda 消融，只允许先在 `full_val` 上比较：
+
+```powershell
+foreach ($lambda in @(0.7, 0.8, 0.9, 0.95)) {
+  python scripts\run_rank_mix.py --profile local_8gb_large --panel full_val --mmr-lambda $lambda --cpu-threads 12
+}
+```
+
+实验记录表：
+
+| Panel | Exp | Lambda | Recall@10 | NDCG@10 | Recall@K | NDCG@K | Coverage@K | Cold Recall@K | 结论 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| full_val | rankmix_lambdarank_din | - | 0.008897 | 0.886585 | 0.137736 | 0.723145 | 0.507665 | 0.233041 | 纯离线相关性指标更高 |
+| full_val | rankmix_lambdarank_din_mmr | 0.9 | 0.008906 | 0.886378 | 0.137488 | 0.721873 | 0.518485 | 0.220177 | Coverage 提升，@200 相关性小幅下降；作为最终重排层采用 |
+| full_test | rankmix_lambdarank_din | - | 0.009220 | 0.878226 | 0.139507 | 0.706465 | 0.519988 | 0.247697 | 原始 RankMix 冻结测试参考 |
+| full_test | rankmix_lambdarank_din_mmr | 0.9 | 0.009218 | 0.876574 | 0.139656 | 0.706562 | 0.524497 | 0.237664 | 最终服务策略 |
+
+采用门槛：
+
+- `NDCG@10` 不应明显下降；
+- `Recall@K` 损失应可解释且幅度很小；
+- `Coverage@K` 或推荐内容多样性应有提升；
+- 如果业务目标强调最终展示多样性，可以接受小幅 @200 损失，将 MMR 作为产品重排层；如果只追求离线相关性最高，则仍以原始 RankMix 作为对照。
+
+本轮 AutoDL 全量 MMR 实验结论见：
+
+```text
+reports/MMR_RERANKING_EXPERIMENT_REPORT.md
+```
+
+## 23. DIN 排序目标与滚动序列实验
 
 该实验严格在 Validation 内选型：
 
@@ -589,7 +652,7 @@ python scripts\run_din_ranking_loss.py --profile local_8gb_large --seed 2026
 
 结果目录：`artifacts/local_8gb_large/din_ranking_loss/`。
 
-## 23. DIN 序列增强与 OOV 内容实验
+## 24. DIN 序列增强与 OOV 内容实验
 
 按照顺序分别运行：
 

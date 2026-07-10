@@ -7,8 +7,8 @@
 ## 项目亮点
 
 - 使用 KuaiRec 小矩阵的近全曝光优势重构离线评测，避免把未曝光物品误当负样本。
-- 召回层包含 `itemcf_main`、`content_text_category`、`feature_tower_id_dropout` 三路候选。
-- 精排层包含 `lambdarank_full_features`、`din_sequence_ranker` 和最终 `rankmix_lambdarank_din`。
+- 召回层包含 `itemcf_main`、`content_text_category`、`feature_tower_dropout_hard_negative` 三路候选。
+- 精排层包含 `lambdarank_full_features`、`din_sequence_ranker` 和 `rankmix_lambdarank_din`，最终展示前使用 `rankmix_lambdarank_din_mmr` 做多样性重排。
 - 支持 `Recall@10 / NDCG@10` 展示层指标，以及 `Recall@200 / NDCG@200` 候选层指标。
 - 在 RTX 4060 Ti 8GB 上可跑小规模消融，在 RTX 3090/4090 24GB 上可跑完整实验。
 
@@ -16,21 +16,23 @@
 
 ```text
 候选召回：
-  itemcf_main                    # 协同过滤主召回
+  itemcf_main                    # 协同过滤稳定补充
   content_text_category           # 类目 + 文本内容召回，补充冷启动
-  feature_tower_id_dropout        # 双塔召回，补充表示学习候选
+  feature_tower_dropout_hard_negative  # 增强双塔召回，作为 48GB boosted 主力候选通道
 
 精排与融合：
   din_sequence_ranker             # DIN 序列兴趣模型
   lambdarank_full_features        # LightGBM LambdaRank 表格特征强基线
   rankmix_lambdarank_din          # 0.6 * RRF(DIN) + 0.4 * RRF(LambdaRank)
+  rankmix_lambdarank_din_mmr      # MMR 相关性 + 多样性重排
 ```
 
-冻结 `full_test` 结果：
+最终 48GB boosted 冻结 `full_test` 结果：
 
-| 策略 | Recall@10 | NDCG@10 | Recall@200 | NDCG@200 | Utility@10 |
-|---|---:|---:|---:|---:|---:|
-| `rankmix_lambdarank_din` | 0.009225 | 0.878409 | 0.139489 | 0.706355 | 1.054035 |
+| 策略 | Recall@10 | NDCG@10 | Recall@200 | NDCG@200 | Coverage@200 | Utility@10 |
+|---|---:|---:|---:|---:|---:|---:|
+| `rankmix_lambdarank_din` | 0.009381 | 0.889421 | 0.153779 | 0.759932 | 0.356477 | 1.103818 |
+| `rankmix_lambdarank_din_mmr` | 0.009334 | 0.886832 | 0.153195 | 0.757705 | 0.360685 | 1.096110 |
 
 ## 快速开始
 
@@ -61,7 +63,7 @@ python scripts\summarize_results.py --profile local_8gb_large
 python scripts\run_experiment.py --profile full_24gb --stage recall --experiment-id itemcf_main --panel full_val
 python scripts\run_experiment.py --profile full_24gb --stage recall --experiment-id content_text_category --panel full_val
 python scripts\run_experiment.py --profile full_24gb --stage recall --experiment-id feature_tower_id_dropout --panel full_val
-python scripts\run_rank_mix.py --profile full_24gb --panel full_val --cpu-threads 14
+python scripts\run_rank_mix.py --profile full_24gb --panel full_val --cpu-threads 14 --mmr-lambda 0.9
 ```
 
 ## 文档入口
@@ -72,6 +74,7 @@ python scripts\run_rank_mix.py --profile full_24gb --panel full_val --cpu-thread
 - `docs/ENGINEERING_DESIGN.md`：召回、精排、消融实验和工程方案设计。
 - `reports/KUAI_REC_ANALYSIS.md`：数据分析与特征处理建议。
 - `reports/FULL_24GB_EXPERIMENT_REPORT.md`：RTX 3090 24GB 全量实验结论。
+- `reports/FULL_48GB_BOOSTED_EXPERIMENT_REPORT.md`：RTX 4090-48G boosted 最终实验结论。
 
 ## 命名说明
 
@@ -84,6 +87,8 @@ python scripts\run_rank_mix.py --profile full_24gb --panel full_val --cpu-thread
 | `itemcf_main` | `R1.0` | ItemCF 主召回 |
 | `content_text_category` | `R2.4` | 类目 + TF-IDF 内容召回 |
 | `feature_tower_id_dropout` | `R3.4` | 特征双塔 + ID Dropout |
+| `feature_tower_dropout_hard_negative` | `R3.6` | 特征双塔 + ID Dropout + hard negative |
 | `lambdarank_full_features` | `PR3` | LightGBM LambdaRank |
 | `din_sequence_ranker` | `DR2.din` | DIN 序列兴趣模型 |
 | `rankmix_lambdarank_din` | `DR4.rank_mix` | RRF 排名融合 |
+| `rankmix_lambdarank_din_mmr` | - | RankMix 后的 MMR 多样性重排 |

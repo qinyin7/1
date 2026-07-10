@@ -27,6 +27,7 @@
 ```text
 itemcf_main + content_text_category + feature_tower_id_dropout
   -> rankmix_lambdarank_din
+  -> rankmix_lambdarank_din_mmr
 ```
 
 第二步，读 `docs/FULL_EXPOSURE_EVALUATION.md`，重点掌握为什么 KuaiRec 不能继续用传统“留出一部分交互当测试集”的方式评测。
@@ -88,7 +89,7 @@ KuaiRec 短视频推荐系统：基于 1253 万条真实交互日志和近全曝
 - 设计近全曝光离线评测协议，将 `full_val` 用于模型选择、`full_test` 用于冻结验收，避免传统稀疏日志评测中的曝光偏差。
 - 实现 ItemCF、内容召回和特征双塔三路召回，双塔使用 ID Dropout 缓解视频 ID 记忆和 OOV 问题，并通过批量 embedding 矩阵 TopK 提升推理效率。
 - 构建候选级排序特征，包括召回来源、通道排名、用户统计、视频统计、作者偏好、类目偏好、内容新鲜度和冷启动标记。
-- 对比 LightGBM LambdaRank、DIN 序列模型和 RankMix 融合，最终采用 `rankmix_lambdarank_din`。
+- 对比 LightGBM LambdaRank、DIN 序列模型和 RankMix 融合，并在最终展示前加入 MMR 重排，最终采用 `rankmix_lambdarank_din_mmr`。
 - 使用用户级 paired bootstrap 显著性检验，验证 RankMix 相对 DIN 在 `Recall@10`、`NDCG@10`、`Recall@200`、`NDCG@200` 上均显著提升。
 
 ## 4. 怎么介绍给面试官？
@@ -230,10 +231,12 @@ KuaiRec 短视频推荐系统：基于 1253 万条真实交互日志和近全曝
 |---|---|---:|---:|---:|---:|---|
 | `full_val` | `lambdarank_full_features_refit` | 0.008681 | 0.867396 | 0.135728 | 0.712195 | 强表格基线 |
 | `full_val` | `din_sequence_ranker_refit` | 0.008822 | 0.880864 | 0.135536 | 0.714261 | 序列兴趣有效 |
-| `full_val` | `rankmix_lambdarank_din` | 0.008896 | 0.886979 | 0.137131 | 0.721257 | 选型胜者 |
+| `full_val` | `rankmix_lambdarank_din` | 0.008897 | 0.886585 | 0.137736 | 0.723145 | 相关性排序胜者 |
+| `full_val` | `rankmix_lambdarank_din_mmr` | 0.008906 | 0.886378 | 0.137488 | 0.721873 | 最终重排策略，Coverage@200=0.518485 |
 | `full_test` | `lambdarank_full_features_refit` | 0.008970 | 0.856819 | 0.138076 | 0.697271 | CPU fallback |
-| `full_test` | `din_sequence_ranker_refit` | 0.009116 | 0.868332 | 0.137707 | 0.698952 | 序列模型主干 |
-| `full_test` | `rankmix_lambdarank_din` | 0.009225 | 0.878409 | 0.139489 | 0.706355 | 最终 baseline |
+| `full_test` | `din_sequence_ranker_refit` | 0.009104 | 0.868664 | 0.137712 | 0.699075 | 序列模型主干 |
+| `full_test` | `rankmix_lambdarank_din` | 0.009220 | 0.878226 | 0.139507 | 0.706465 | 原始 RankMix 冻结测试参考 |
+| `full_test` | `rankmix_lambdarank_din_mmr` | 0.009218 | 0.876574 | 0.139656 | 0.706562 | 最终服务策略，Coverage@200=0.524497 |
 
 ### 10.3 显著性检验
 
